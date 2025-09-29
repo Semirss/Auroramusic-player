@@ -270,13 +270,39 @@ void _playTrackDetails(TrackDetails track, WidgetRef ref, BuildContext context) 
       id: track.id,
       title: track.title,
       artistName: track.artist,
-      albumId: track.albumId, // Now this will work
+      albumId: track.albumId,
       storagePath: fileName,
       isLiked: track.isLiked,
-      // createdAt is optional in Track model, so we can omit it
     );
 
-    await _playTrack(playableTrack, context, ref);
+    // Get the entire playlist to set up the queue
+    final playlistTracks = await ref.read(playlistTracksProvider(track.albumId).future);
+    
+    // Convert all tracks to Track objects
+    final trackObjects = playlistTracks.map((t) => Track(
+      id: t.id,
+      title: t.title,
+      artistName: t.artist,
+      albumId: t.albumId,
+      storagePath: t.mp3Path.split('/').last,
+      isLiked: t.isLiked,
+    )).toList();
+
+    final playerService = ref.read(playerServiceProvider);
+    
+    // Clear and set up the queue with all tracks
+    await playerService.clearQueue();
+    await playerService.addTracksToQueue(trackObjects);
+    
+    // Find the index of the current track in the playlist
+    final currentIndex = playlistTracks.indexWhere((t) => t.id == track.id);
+    if (currentIndex != -1) {
+      await playerService.playTrackAtIndex(currentIndex);
+    }
+    
+    // Update state
+    ref.read(currentTrackProvider.notifier).state = playableTrack;
+    ref.read(isPlayingProvider.notifier).state = true;
 
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -298,23 +324,43 @@ void _playTrackDetails(TrackDetails track, WidgetRef ref, BuildContext context) 
     }
   }
 }
-  Future<void> _playTrack(Track track, BuildContext context, WidgetRef ref) async {
-    try {
-      final playerService = ref.read(playerServiceProvider);
-       playerService.clearQueue();
-       playerService.addQueueItem(track.toMediaItem());
-       playerService.play();
-      ref.read(currentTrackProvider.notifier).state = track;
-      ref.read(isPlayingProvider.notifier).state = true;
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error playing track: $e'), backgroundColor: Colors.red),
-        );
-      }
+Future<void> _playTrack(Track track, BuildContext context, WidgetRef ref) async {
+  try {
+    final playerService = ref.read(playerServiceProvider);
+    
+    // Get the entire playlist to set up the queue
+    final playlistTracks = await ref.read(playlistTracksProvider(track.albumId).future);
+    
+    // Convert all tracks to Track objects
+    final trackObjects = playlistTracks.map((t) => Track(
+      id: t.id,
+      title: t.title,
+      artistName: t.artist,
+      albumId: t.albumId,
+      storagePath: t.mp3Path.split('/').last,
+      isLiked: t.isLiked,
+    )).toList();
+
+    // Clear and set up the queue with all tracks
+    await playerService.clearQueue();
+    await playerService.addTracksToQueue(trackObjects);
+    
+    // Find the index of the current track in the playlist
+    final currentIndex = playlistTracks.indexWhere((t) => t.id == track.id);
+    if (currentIndex != -1) {
+      await playerService.playTrackAtIndex(currentIndex);
+    }
+    
+    ref.read(currentTrackProvider.notifier).state = track;
+    ref.read(isPlayingProvider.notifier).state = true;
+  } catch (e) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error playing track: $e'), backgroundColor: Colors.red),
+      );
     }
   }
-
+}
   void _togglePlayPause(WidgetRef ref) async {
     final currentTrack = ref.read(currentTrackProvider);
     if (currentTrack == null) return;
@@ -331,52 +377,73 @@ void _playTrackDetails(TrackDetails track, WidgetRef ref, BuildContext context) 
       debugPrint("Error toggling play/pause: $e");
     }
   }
-
-  void _skipToNext(WidgetRef ref, BuildContext context) async {
-    try {
-      final playerService = ref.read(playerServiceProvider);
-      if (playerService.hasNext) {
-        await playerService.skipToNext();
-        await Future.delayed(const Duration(milliseconds: 100)); // Allow state to update
-        final newTrack = playerService.getCurrentTrack();
-        if (newTrack != null) {
-          ref.read(currentTrackProvider.notifier).state = newTrack;
-          ref.read(isPlayingProvider.notifier).state = true;
-        }
-      } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('End of queue'), duration: Duration(seconds: 1)),
-          );
-        }
+void _skipToNext(WidgetRef ref, BuildContext context) async {
+  try {
+    final playerService = ref.read(playerServiceProvider);
+    
+    // Check if we have a next track using the player service
+    if (playerService.hasNext) {
+      await playerService.skipToNext();
+      
+      // Wait a bit for the player to update
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // Get the new current track
+      final newTrack = playerService.getCurrentTrack();
+      if (newTrack != null) {
+        ref.read(currentTrackProvider.notifier).state = newTrack;
+        ref.read(isPlayingProvider.notifier).state = true;
       }
-    } catch (e) {
-      debugPrint("Error skipping to next: $e");
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No next track available')),
+        );
+      }
+    }
+  } catch (e) {
+    debugPrint("Error skipping to next: $e");
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error skipping to next: $e')),
+      );
     }
   }
+}
 
-  void _skipToPrevious(WidgetRef ref, BuildContext context) async {
-    try {
-      final playerService = ref.read(playerServiceProvider);
-      if (playerService.hasPrevious) {
-        await playerService.skipToPrevious();
-        await Future.delayed(const Duration(milliseconds: 100)); // Allow state to update
-        final newTrack = playerService.getCurrentTrack();
-        if (newTrack != null) {
-          ref.read(currentTrackProvider.notifier).state = newTrack;
-          ref.read(isPlayingProvider.notifier).state = true;
-        }
-      } else {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Start of queue'), duration: Duration(seconds: 1)),
-          );
-        }
+void _skipToPrevious(WidgetRef ref, BuildContext context) async {
+  try {
+    final playerService = ref.read(playerServiceProvider);
+    
+    // Check if we have a previous track using the player service
+    if (playerService.hasPrevious) {
+      await playerService.skipToPrevious();
+      
+      // Wait a bit for the player to update
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // Get the new current track
+      final newTrack = playerService.getCurrentTrack();
+      if (newTrack != null) {
+        ref.read(currentTrackProvider.notifier).state = newTrack;
+        ref.read(isPlayingProvider.notifier).state = true;
       }
-    } catch (e) {
-      debugPrint("Error skipping to previous: $e");
+    } else {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No previous track available')),
+        );
+      }
+    }
+  } catch (e) {
+    debugPrint("Error skipping to previous: $e");
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error skipping to previous: $e')),
+      );
     }
   }
+}
 
   String _getRandomPlaylistImage(String playlistId) {
     // Use playlist ID to generate consistent but random image
@@ -395,6 +462,13 @@ void _playTrackDetails(TrackDetails track, WidgetRef ref, BuildContext context) 
     final isDarkMode = theme.isDarkMode;
 
     final homeContentAsync = ref.watch(homeContentProvider);
+ // ADD THE STATE LISTENER RIGHT HERE:
+  ref.listen(playerServiceProvider.select((service) => service.isPlaying), (previous, current) {
+    if (previous != current) {
+      print("🔄 PlayerService playing state changed: $current");
+      ref.read(isPlayingProvider.notifier).state = current;
+    }
+  });
 
     return Scaffold(
       key: _scaffoldKey,
@@ -1077,9 +1151,10 @@ final favoriteContent = Consumer(
             Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  icon: Icon(Icons.skip_previous, color: playerService.hasPrevious ? textColor : textColor.withOpacity(0.3)),
-                  onPressed: playerService.hasPrevious ? () => _skipToPrevious(ref, context) : null,
+              IconButton(
+                icon: Icon(Icons.skip_previous, 
+                    color: playerService.hasPrevious ? textColor : textColor.withOpacity(0.3)),
+                onPressed: playerService.hasPrevious ? () => _skipToPrevious(ref, context) : null,
                 ),
                 IconButton(
                   icon: Icon(
@@ -1090,10 +1165,10 @@ final favoriteContent = Consumer(
                   onPressed: () => _togglePlayPause(ref),
                 ),
                 IconButton(
-                  icon: Icon(Icons.skip_next, color: playerService.hasNext ? textColor : textColor.withOpacity(0.3)),
-                  onPressed: playerService.hasNext ? () => _skipToNext(ref, context) : null,
-                  padding: const EdgeInsets.only(right: 8.0),
-                ),
+  icon: Icon(Icons.skip_next, 
+      color: playerService.hasNext ? textColor : textColor.withOpacity(0.3)),
+  onPressed: playerService.hasNext ? () => _skipToNext(ref, context) : null,
+),
               ],
             ),
           ],
@@ -1551,23 +1626,22 @@ class FullScreenPlayer extends ConsumerWidget {
   }
 
   // FIXED: Improved play/pause toggle
-  void _togglePlayPause(WidgetRef ref) async {
+   void _togglePlayPause(WidgetRef ref) async {
+    final currentTrack = ref.read(currentTrackProvider);
+    if (currentTrack == null) return;
     try {
       final playerService = ref.read(playerServiceProvider);
-      final currentIsPlaying = ref.read(isPlayingProvider);
-
-      if (currentIsPlaying) {
-        await playerService.pause();
-        ref.read(isPlayingProvider.notifier).state = false;
+      final isPlaying = ref.read(isPlayingProvider);
+      if (isPlaying) {
+       playerService.pause();
       } else {
-        await playerService.play();
-        ref.read(isPlayingProvider.notifier).state = true;
+         playerService.play();
       }
+      ref.read(isPlayingProvider.notifier).state = !isPlaying;
     } catch (e) {
       debugPrint("Error toggling play/pause: $e");
     }
   }
-
   // FIXED: Skip to next with proper async handling
   void _skipToNext(WidgetRef ref, BuildContext context) async {
     try {

@@ -48,16 +48,23 @@ class PlayerService extends BaseAudioHandler {
       print("⏱️ Position: $position");
     });
 
-    // Listen to current index changes
+    // Listen to current index changes - FIXED: This is crucial for tracking queue position
     _player.currentIndexStream.listen((index) {
-      print("📊 Current index: $index");
+      print("📊 Current index: $index, Total tracks: ${_currentTracks.length}");
       if (index != null && index < _currentTracks.length) {
         _currentIndex = index;
         final track = _currentTracks[index];
-        print("🎶 Now playing: ${track.title}");
+        print("🎶 Now playing: ${track.title} (index: $index)");
         
-        // Update media item for audio service using the proper method
+        // Update media item for audio service
         mediaItem.add(track.toMediaItem());
+        
+        // Print queue info for debugging
+        print("📋 Queue status - HasPrevious: $hasPrevious, HasNext: $hasNext");
+        print("📋 Queue indices: 0 to ${_currentTracks.length - 1}, Current: $_currentIndex");
+      } else if (index == null) {
+        _currentIndex = -1;
+        print("📊 No current index - queue might be empty");
       }
     });
 
@@ -101,10 +108,11 @@ class PlayerService extends BaseAudioHandler {
       await _playlist.add(audioSource);
       _currentTracks.add(track);
       
-      // Update queue using the proper method
+      // Update queue
       queue.add(_currentTracks.map((t) => t.toMediaItem()).toList());
       
       print("✅ Added track to playlist: ${track.title}");
+      print("📋 Total tracks in queue: ${_currentTracks.length}");
 
     } catch (e) {
       print("❌ Error adding queue item: $e");
@@ -112,11 +120,18 @@ class PlayerService extends BaseAudioHandler {
     }
   }
 
-  // NEW: Play track at specific index
+  // NEW: Play track at specific index - FIXED: Better index handling
   Future<void> playTrackAtIndex(int index) async {
     try {
       if (index >= 0 && index < _currentTracks.length) {
+        print("🎯 Attempting to play track at index: $index");
+        
+        // First ensure we're at the beginning of the track
         await _player.seek(Duration.zero, index: index);
+        
+        // Small delay to ensure seek completes
+        await Future.delayed(const Duration(milliseconds: 100));
+        
         await play();
         _currentIndex = index;
         
@@ -124,7 +139,10 @@ class PlayerService extends BaseAudioHandler {
         final track = _currentTracks[index];
         mediaItem.add(track.toMediaItem());
         
-        print("🎯 Playing track at index: $index - ${track.title}");
+        print("🎯 Now playing track at index: $index - ${track.title}");
+        print("📋 Queue status - HasPrevious: $hasPrevious, HasNext: $hasNext");
+      } else {
+        print("❌ Invalid index: $index, queue length: ${_currentTracks.length}");
       }
     } catch (e) {
       print("❌ Error playing track at index $index: $e");
@@ -149,12 +167,14 @@ class PlayerService extends BaseAudioHandler {
     }
   }
 
-  // Add multiple tracks to queue
+  // Add multiple tracks to queue - FIXED: Better queue initialization
   Future<void> addTracksToQueue(List<Track> tracks) async {
     try {
+      print("📥 Adding ${tracks.length} tracks to queue");
       await clearQueue();
       
-      for (final track in tracks) {
+      for (int i = 0; i < tracks.length; i++) {
+        final track = tracks[i];
         final mediaItem = track.toMediaItem();
         final publicUrl = _getSupabaseUrl(track.storagePath);
         
@@ -166,12 +186,13 @@ class PlayerService extends BaseAudioHandler {
           
           await _playlist.add(audioSource);
           _currentTracks.add(track);
+          print("➕ Added track $i: ${track.title}");
         }
       }
       
       _currentIndex = 0;
       
-      // Update queue and media item using proper methods
+      // Update queue and media item
       queue.add(_currentTracks.map((t) => t.toMediaItem()).toList());
       
       if (_currentTracks.isNotEmpty) {
@@ -179,6 +200,9 @@ class PlayerService extends BaseAudioHandler {
       }
       
       print("✅ Added ${tracks.length} tracks to queue");
+      print("📋 Final queue length: ${_currentTracks.length}");
+      print("🎯 Current index set to: $_currentIndex");
+      
     } catch (e) {
       print("❌ Error adding tracks to queue: $e");
       rethrow;
@@ -209,7 +233,7 @@ class PlayerService extends BaseAudioHandler {
   @override
   Future<void> play() async {
     try {
-       _player.play();
+      await _player.play();
       print("▶️ Play command executed");
     } catch (e) {
       print("❌ Error playing: $e");
@@ -220,7 +244,7 @@ class PlayerService extends BaseAudioHandler {
   @override
   Future<void> pause() async {
     try {
-      _player.pause();
+      await _player.pause();
       print("⏸️ Pause command executed");
     } catch (e) {
       print("❌ Error pausing: $e");
@@ -232,9 +256,9 @@ class PlayerService extends BaseAudioHandler {
   Future<void> playPause() async {
     try {
       if (_player.playing) {
-         pause();
+        await pause();
       } else {
-        play();
+        await play();
       }
     } catch (e) {
       print("❌ Error in playPause: $e");
@@ -267,16 +291,14 @@ class PlayerService extends BaseAudioHandler {
   @override
   Future<void> skipToNext() async {
     try {
+      print("⏭️ Attempting skip to next - HasNext: $hasNext, CurrentIndex: $_currentIndex");
       if (hasNext) {
-        _player.seekToNext();
-        play();
-        print("⏭️ Skip to next");
+        await _player.seekToNext();
+        await Future.delayed(const Duration(milliseconds: 50)); // Small delay
+        await play();
+        print("⏭️ Skip to next completed");
         
-        // Update current track after skipping
-        final newTrack = getCurrentTrack();
-        if (newTrack != null) {
-          mediaItem.add(newTrack.toMediaItem());
-        }
+        // The currentIndexStream listener will handle the track update
       } else {
         print("ℹ️ No next track available");
       }
@@ -289,16 +311,14 @@ class PlayerService extends BaseAudioHandler {
   @override
   Future<void> skipToPrevious() async {
     try {
+      print("⏮️ Attempting skip to previous - HasPrevious: $hasPrevious, CurrentIndex: $_currentIndex");
       if (hasPrevious) {
-        _player.seekToPrevious();
-        play();
-        print("⏮️ Skip to previous");
+        await _player.seekToPrevious();
+        await Future.delayed(const Duration(milliseconds: 50)); // Small delay
+        await play();
+        print("⏮️ Skip to previous completed");
         
-        // Update current track after skipping
-        final newTrack = getCurrentTrack();
-        if (newTrack != null) {
-          mediaItem.add(newTrack.toMediaItem());
-        }
+        // The currentIndexStream listener will handle the track update
       } else {
         print("ℹ️ No previous track available");
       }
@@ -315,7 +335,7 @@ class PlayerService extends BaseAudioHandler {
         await _playlist.removeAt(index);
         _currentTracks.removeAt(index);
         
-        // Update queue using proper method
+        // Update queue
         queue.add(_currentTracks.map((t) => t.toMediaItem()).toList());
         
         print("🗑️ Removed track at index $index");
@@ -332,7 +352,7 @@ class PlayerService extends BaseAudioHandler {
       _currentTracks.clear();
       _currentIndex = -1;
       
-      // Clear queue and media item using proper methods
+      // Clear queue and media item
       queue.value = [];
       mediaItem.add(null);
       
@@ -356,13 +376,23 @@ class PlayerService extends BaseAudioHandler {
   }
 
   List<Track> getQueueTracks() {
-    return _currentTracks;
+    return List.from(_currentTracks); // Return a copy to prevent external modification
   }
 
-  // FIXED: Getter properties
+  // FIXED: Getter properties with better debugging
   bool get isPlaying => _player.playing;
-  bool get hasNext => _player.hasNext;
-  bool get hasPrevious => _player.hasPrevious;
+  
+  bool get hasNext {
+    final hasNext = _player.hasNext;
+    print("🔍 hasNext check: $hasNext (currentIndex: $_currentIndex, total: ${_currentTracks.length})");
+    return hasNext;
+  }
+  
+  bool get hasPrevious {
+    final hasPrevious = _player.hasPrevious;
+    print("🔍 hasPrevious check: $hasPrevious (currentIndex: $_currentIndex, total: ${_currentTracks.length})");
+    return hasPrevious;
+  }
 
   Duration get position => _player.position;
   Duration? get duration => _player.duration;
