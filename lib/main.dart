@@ -1,5 +1,6 @@
 import 'package:ss_musicplayer/src/core/theme/app_theme.dart';
 import 'package:ss_musicplayer/src/features/player/screens/login_screen.dart';
+  import 'package:ss_musicplayer/src/features/home/screens/WelcomeScreen.dart'; 
 import 'package:ss_musicplayer/src/features/player/services/auth_service.dart';
 import 'package:ss_musicplayer/src/features/home/screens/home_screen.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -15,6 +16,9 @@ import 'package:ss_musicplayer/src/features/player/services/player_service.dart'
 
 // Late final global variable for the AudioHandler
 late AudioHandler _audioHandler;
+
+// Provider to track if welcome screen has been shown
+final welcomeScreenShownProvider = StateProvider<bool>((ref) => false);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -102,6 +106,8 @@ class AuroraMusicApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Watch the authentication state
     final authState = ref.watch(authStateChangesProvider);
+    // Watch if welcome screen has been shown
+    final welcomeScreenShown = ref.watch(welcomeScreenShownProvider);
 
     return MaterialApp(
       title: 'Aurora Music',
@@ -113,7 +119,19 @@ class AuroraMusicApp extends ConsumerWidget {
             print("👤 User logged in: ${user.email}");
             return const HomeScreen();
           }
-          print("👤 No user logged in, showing login screen");
+          
+          // No user logged in - check if welcome screen should be shown
+          if (!welcomeScreenShown) {
+            print("👤 No user logged in, showing welcome screen");
+            return WelcomeScreen(
+              onGetStarted: () {
+                // Mark welcome screen as shown and navigate to login
+                ref.read(welcomeScreenShownProvider.notifier).state = true;
+              },
+            );
+          }
+          
+          print("👤 Welcome screen already shown, displaying login screen");
           return const LoginScreen();
         },
         loading: () {
