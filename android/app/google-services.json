@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "227901589859",
+    "project_id": "chat-app-71c92",
+    "storage_bucket": "chat-app-71c92.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:227901589859:android:8eb477b9a0507c0468ab56",
+        "android_client_info": {
+          "package_name": "com.example.ss_musicplayer"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDPsVAgSloMp78n1d449R02fheVSVkm0u0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

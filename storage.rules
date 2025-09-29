@@ -1,0 +1,9 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // BLOCK EVERYTHING - We're using Supabase for all storage
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

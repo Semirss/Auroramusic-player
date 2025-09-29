@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users can read/write their own data
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Publicly readable content for authenticated users
+    match /tracks/{trackId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null; // Simplified for free tier
+    }
+
+    match /albums/{albumId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null; // Simplified for free tier
+    }
+
+    // Playlists can be read by anyone, but only written by owner
+    match /playlists/{playlistId} {
+      allow read: if request.auth != null;
+      allow create, update, delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
+    }
+  }
+}

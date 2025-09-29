@@ -1,0 +1,50 @@
+name: ss_musicplayer
+description: A music streaming app
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.3 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  uuid: ^3.0.7
+  share_plus: ^10.0.0
+  # Firebase
+  firebase_core: ^2.25.4
+  firebase_auth: ^4.17.4
+  cloud_firestore: ^4.15.4
+  google_sign_in: ^6.1.1 
+
+  # Supabase
+  supabase_flutter: ^1.10.15
+
+  # Audio
+  just_audio: ^0.9.36
+  audio_service: ^0.18.12
+  audio_session: ^0.1.18
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+
+  # UI & Icons
+  cupertino_icons: ^1.0.2
+  animations: ^2.0.11
+
+  # Utilities
+  flutter_cache_manager: ^3.3.1
+  file_picker: ^8.0.7
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+  build_runner: ^2.4.8
+  riverpod_generator: ^2.3.9
+
+flutter:
+  uses-material-design: true
+  assets:
+     - assets/images/google_logo.png
